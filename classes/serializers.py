@@ -124,3 +124,28 @@ class BookingRequestSerializer(serializers.Serializer):
     
 class BookingCancelInputSerializer(serializers.Serializer):
     booking_uuid = serializers.UUIDField()
+
+class WaitingCancelInputSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    
+    
+class MyBookingListSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source="studio_class.name",read_only=True,)
+    studio_name = serializers.CharField(source="studio_class.studio.name",read_only=True,)
+    start_time = serializers.DateTimeField(source="studio_class.start_time",read_only=True,)
+    credit_cost = serializers.IntegerField(source="studio_class.credit_cost",read_only=True,)
+
+    class Meta:
+        model = Booking
+        fields = ["uuid","class_name","studio_name","start_time","credit_cost","credits_charged","status","booked_at","cancelled_at",]
+
+
+class WaitlistListSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source="studio_class.name",read_only=True,)
+    studio_name = serializers.CharField(source="studio_class.studio.name",read_only=True,)
+    start_time = serializers.DateTimeField(source="studio_class.start_time",read_only=True,)
+    credit_cost = serializers.IntegerField(source="studio_class.credit_cost",read_only=True,)
+
+    class Meta:
+        model = WaitlistEntry
+        fields = ["id","class_name","studio_name","start_time","credit_cost","joined_at",]

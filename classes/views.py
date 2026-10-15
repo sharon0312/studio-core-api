@@ -11,7 +11,7 @@ from studio_core import helper
 from users import models as user_models
 from studios.models import Studio
 from .models import StudioClass,CreditPack,Booking,WaitlistEntry
-from .serializers import StudioClassInputSerializer, StudioClassSerializer,StudioClassListSerializer,MembersListSerializer,GrantCreditsSerializer,BookingRequestSerializer,BookingCancelInputSerializer
+from .serializers import StudioClassInputSerializer, StudioClassSerializer,StudioClassListSerializer,MembersListSerializer,GrantCreditsSerializer,BookingRequestSerializer,BookingCancelInputSerializer,WaitingCancelInputSerializer,WaitlistListSerializer,MyBookingListSerializer
 from studio_core.helper import staff_required
 
 
@@ -216,13 +216,23 @@ def book_class(request):
     
 def promote_waitlisted_member(studio_class):
     now = timezone.now()
-    waiting_entries = WaitlistEntry.objects.filter(studio_class=studio_class).order_by("joined_at", "id")
+    waiting_entries = (
+        WaitlistEntry.objects
+        .select_for_update()
+        .filter(studio_class=studio_class)
+        .order_by("joined_at", "id")
+    )
     for entry in waiting_entries:
-        credit_packs = CreditPack.objects.select_for_update().filter(
-            member=entry.member,
-            expires_at__gt=now,
-            remaining_credits__gt=0,
-        ).order_by("expires_at", "id")
+        credit_packs = list(
+            CreditPack.objects
+            .select_for_update()
+            .filter(
+                member=entry.member,
+                expires_at__gt=now,
+                remaining_credits__gt=0,
+            )
+            .order_by("expires_at", "id")
+        )
         available_credits = sum(
             pack.remaining_credits for pack in credit_packs
         )
@@ -244,7 +254,6 @@ def promote_waitlisted_member(studio_class):
         )
         entry.delete()
         return booking
-
     return None
     
     
@@ -297,3 +306,39 @@ def cancel_booking(request):
             ),
         },
     )
+    
+    
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def leave_waitlist(request):
+    with transaction.atomic():
+        serializer =  WaitingCancelInputSerializer(data=request.data)
+        if not serializer.is_valid():
+            return helper.failure(status.HTTP_400_BAD_REQUEST,"Invalid cancel request",serializer.errors,)
+        waitlist_id = serializer.validated_data['waitlist_id']
+        entry = (
+            WaitlistEntry.objects
+            .select_for_update()
+            .filter(id=waitlist_id,member=request.user,).first()
+        )
+        if not entry:
+            return helper.failure(status.HTTP_404_NOT_FOUND,"Waitlist entry not found",)
+        entry.delete()
+    return helper.success(status.HTTP_200_OK,"Successfully left the waitlist",[])
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_bookings(request):
+    bookings = (Booking.objects.filter(member=request.user).select_related("studio_class__studio").order_by("-booked_at"))
+    serializer = MyBookingListSerializer(bookings, many=True)
+    return helper.success(status.HTTP_200_OK,"Bookings fetched successfully",serializer.data,)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_waitlist(request):
+    waitlist_entries = (WaitlistEntry.objects.filter(member=request.user).select_related("studio_class__studio").order_by("joined_at", "id"))
+    serializer = WaitlistListSerializer(waitlist_entries,many=True,)
+    return helper.success(status.HTTP_200_OK,"Waitlist fetched successfully",serializer.data,)
