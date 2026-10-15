@@ -9,6 +9,20 @@ urlpatterns = [
     path('list-classes', views.list_classes, name='list-classes'),
     
     
+    
+    #### member apis #####
+    path('book-class', views.book_class, name='book-class'),
+    path('cancel-booking', views.cancel_booking, name='cancel-booking'),
+    # path('cancel-booking', views.cancel_booking, name='cancel-booking'),
+    
+
+    
+    
+    
+    
+    
+    
+    
     ######## staff apis #########
     
     path('create-studio-class', views.create_class, name='create-studio-class'),

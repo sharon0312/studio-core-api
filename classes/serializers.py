@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-from .models import StudioClass,CreditPack
+from .models import StudioClass,CreditPack,Booking,WaitlistEntry
 from studios.models import Studio
 from users.models import UserDetail
 from studio_core.helper import validate_timezone
@@ -23,25 +23,38 @@ class StudioClassInputSerializer(serializers.Serializer):
 
 class StudioClassSerializer(serializers.ModelSerializer):
     studio_uuid = serializers.UUIDField(source="studio.uuid", read_only=True)
-    # available_spots = serializers.SerializerMethodField()
+    available_spots = serializers.SerializerMethodField()
 
     class Meta:
         model = StudioClass
-        fields = ["uuid", "studio_uuid", "name", "start_time", "duration_minutes", "spots", "credit_cost", "created_at"]
+        fields = ["uuid", "studio_uuid", "name", "start_time", "duration_minutes", "spots","available_spots","credit_cost", "created_at"]
+        
+    def get_available_spots(self, obj):
+        booked_spots = Booking.objects.filter(
+            studio_class=obj,
+            status=Booking.Status.CONFIRMED,
+        ).count()
 
-    # def get_available_spots(self, obj):
-    #     from bookings.models import Booking
-    #     booked = Booking.objects.filter(studio_class=obj, status="CONFIRMED").count()
-    #     return max(obj.spots - booked, 0)
+        return max(obj.spots - booked_spots, 0)
     
     
 class StudioClassListSerializer(serializers.ModelSerializer):
     # studio_uuid = serializers.UUIDField(source="studio.uuid", read_only=True)
     studio_name = serializers.CharField(source="studio.name", read_only=True)
+    available_spots = serializers.SerializerMethodField()
 
     class Meta:
         model = StudioClass
-        fields = ["uuid", "studio_name", "name", "start_time", "duration_minutes", "spots", "credit_cost", "created_at"]
+        fields = ["uuid", "studio_name", "name", "start_time", "duration_minutes", "spots", "available_spots","credit_cost", "created_at"]
+        
+    def get_available_spots(self, obj):
+        booked_spots = Booking.objects.filter(
+            studio_class=obj,
+            status=Booking.Status.CONFIRMED,
+        ).count()
+
+        return max(obj.spots - booked_spots, 0)
+
         
         
 class MembersListSerializer(serializers.ModelSerializer):
@@ -91,3 +104,23 @@ class GrantCreditsSerializer(serializers.Serializer):
 
         return value
 
+
+# class BookingRequestSerializer(serializers.Serializer):
+#     class_uuid = serializers.SlugRelatedField(slug_field="uuid",queryset=StudioClass.objects.all(),source="studio_class",)
+#     idempotency_key = serializers.CharField(max_length=255,allow_blank=False,trim_whitespace=True,)
+#     def validate(self, attrs):
+#         studio_class = attrs["studio_class"]
+#         if studio_class.start_time <= timezone.now():
+#             raise serializers.ValidationError({
+#                 "class_uuid": "This class has already started."
+#             })
+#         return attrs
+
+
+class BookingRequestSerializer(serializers.Serializer):
+    class_uuid = serializers.UUIDField()
+    idempotency_key = serializers.CharField(max_length=255,allow_blank=False,trim_whitespace=True,)
+    
+    
+class BookingCancelInputSerializer(serializers.Serializer):
+    booking_uuid = serializers.UUIDField()

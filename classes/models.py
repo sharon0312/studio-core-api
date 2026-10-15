@@ -4,6 +4,7 @@ from django.db import models
 from django.db.models import F, Q
 from studios.models import Studio
 from django.contrib.auth.models import User
+from users.models import UserDetail
 
 
 class StudioClass(models.Model):
@@ -27,7 +28,6 @@ class StudioClass(models.Model):
     
 class CreditPack(models.Model):
     member = models.ForeignKey(User,on_delete=models.PROTECT,related_name="credit_packs",)
-    # granted_by = models.ForeignKey(User,on_delete=models.PROTECT,related_name="granted_credit_packs")
     total_credits = models.PositiveIntegerField()
     remaining_credits = models.PositiveIntegerField()
     granted_at = models.DateTimeField(auto_now_add=True)
@@ -52,3 +52,48 @@ class CreditPack(models.Model):
             f"{self.member_id}: "
             f"{self.remaining_credits}/{self.total_credits} credits"
         )
+
+
+
+
+class Booking(models.Model):
+    class Status(models.TextChoices):
+        CONFIRMED = "CONFIRMED", "Confirmed"
+        CANCELLED = "CANCELLED", "Cancelled"
+    uuid = models.UUIDField(default=uuid.uuid4,unique=True,editable=False)
+    member = models.ForeignKey(User,on_delete=models.PROTECT,related_name="class_bookings",)
+    studio_class = models.ForeignKey(StudioClass,on_delete=models.PROTECT,related_name="bookings",)
+    status = models.CharField(max_length=20,choices=Status.choices,default=Status.CONFIRMED,)
+    credits_charged = models.PositiveIntegerField()
+    idempotency_key = models.CharField(max_length=255,null=True,blank=True,)
+    booked_at = models.DateTimeField(auto_now_add=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "studio_class"],
+                condition=Q(status="CONFIRMED"),
+                name="unique_confirmed_member_class",
+            ),
+            models.UniqueConstraint(
+                fields=["member", "idempotency_key"],
+                condition=Q(idempotency_key__isnull=False),
+                name="unique_booking_idempotency_key",
+            ),
+        ]
+
+
+class WaitlistEntry(models.Model):
+    member = models.ForeignKey(User,on_delete=models.PROTECT,related_name="class_waitlist_entries",)
+    studio_class = models.ForeignKey(StudioClass,on_delete=models.PROTECT,related_name="waitlist_entries",)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["joined_at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["member", "studio_class"],
+                name="unique_waiting_member_class",
+            )
+        ]
