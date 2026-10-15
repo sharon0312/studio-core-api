@@ -7,7 +7,19 @@ from datetime import datetime,timedelta,date
 import uuid
 from django.db.models import Q,Sum
 import json
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from django.core.exceptions import ValidationError
+from functools import wraps
+from rest_framework.response import Response
 
+
+def validate_timezone(value: str) -> None:
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValidationError(
+            "Enter a valid IANA timezone, such as Asia/Kolkata."
+        )
 
 
 
@@ -76,3 +88,36 @@ def failure(status_code, message, error = []):
         "message": message,
         "error": error,
     }, status=status_code)
+    
+
+
+def staff_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        user = request.user
+
+        if not user.is_authenticated:
+            return Response(
+                {
+                    "status": 0,
+                    "message": "Authentication required",
+                    "data": {},
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        is_staff = user.details.filter(role="STAFF").exists()
+
+        if not is_staff:
+            return Response(
+                {
+                    "status": 0,
+                    "message": "Only staff users can perform this action",
+                    "data": {},
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return view_func(request, *args, **kwargs)
+
+    return wrapper
